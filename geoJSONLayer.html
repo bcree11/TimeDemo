@@ -1,0 +1,312 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>Filter features with TimeSlider | Sample | ArcGIS API for JavaScript 4.18</title>
+
+    <style>
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+
+      #timeSlider {
+        position: absolute;
+        left: 5%;
+        right: 5%;
+        bottom: 20px;
+      }
+
+      #infoDiv {
+        padding: 10px;
+        width: 280px;
+        height: 112px;
+      }
+
+      #infoDiv span {
+        color: #f9c653;
+        font-size: 12pt;
+        font-weight: bolder;
+      }
+
+      .esri-time-slider__layout--wide .esri-time-slider__time-extent,
+      .esri-time-slider__layout--compact .esri-time-slider__time-extent,
+      .esri-time-slider__layout--wide .esri-time-slider__min,
+      .esri-time-slider__layout--wide .esri-time-slider__max,
+      .esri-time-slider__layout--compact .esri-time-slider__min-date,
+      .esri-time-slider__layout--compact .esri-time-slider__max-date,
+      .esri-legend__layer-caption,
+      .esri-time-slider__time-extent {
+        display: none !important;
+      }
+    </style>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.18/esri/themes/dark/main.css" />
+    <script src="https://js.arcgis.com/4.18/"></script>
+    <script>
+      require([
+        "esri/config",
+        "esri/WebMap",
+        "esri/views/MapView",
+        "esri/layers/GeoJSONLayer",
+        "esri/widgets/TimeSlider",
+        "esri/widgets/Expand",
+        "esri/widgets/Legend",
+        "esri/core/watchUtils",
+        "esri/core/promiseUtils"
+      ], function (esriConfig, WebMap, MapView, GeoJSONLayer, TimeSlider, Expand, Legend, watchUtils, promiseUtils) {
+        esriConfig.portalUrl = "https://nw-brews.mapsdevext.arcgis.com";
+        let year = 2000;
+        let definitions = [];
+        for (let i = 19; i >= 0; i--) {
+          definitions.push({
+            year,
+            offset: i
+          });
+          year++;
+        }
+
+        createLayer = (definition) => {
+          return new GeoJSONLayer({
+            url:
+              "https://services1.arcgis.com/jUJYIo9tSA7EHvfZ/arcgis/rest/services/California_Fire_Perimeters/FeatureServer/0/query?where=(Year_%3D" +
+              definition.year +
+              ")%20AND%20(CONT_DATE%20IS%20NOT%20NULL)%20AND%20(ALARM_DATE%20IS%20NOT%20NULL)&outFields=*&outSR=4326&f=geojson",
+            renderer: {
+              type: "simple",
+              symbol: {
+                color: [255, 0, 0, 255],
+                outline: {
+                  color: [255, 170, 0, 255],
+                  width: 0.75,
+                  type: "simple-line",
+                  style: "short-dash"
+                },
+                type: "simple-fill",
+                style: "solid"
+              }
+            },
+            timeInfo: {
+              startField: "ALARM_DATE",
+              endField: "CONT_DATE"
+            },
+            timeOffset: {
+              value: definition.offset,
+              unit: "years"
+            },
+            outFields: ["*"],
+            popupTemplate: {
+              title: "{title}",
+              content: [
+                {
+                  type: "fields",
+                  fieldInfos: [
+                    {
+                      fieldName: "YEAR_",
+                      label: "Year",
+                      visible: true
+                    },
+                    {
+                      fieldName: "FIRE_NAME",
+                      label: "Fire Name",
+                      visible: true
+                    },
+                    {
+                      fieldName: "ALARM_DATE",
+                      label: "Alarm Date",
+                      visible: true
+                    },
+                    {
+                      fieldName: "CONT_DATE",
+                      label: "Containment Date",
+                      visible: true
+                    },
+                    {
+                      fieldName: "GIS_ACRES",
+                      label: "Acres",
+                      visible: true
+                    }
+                  ]
+                }
+              ]
+            }
+          });
+        };
+
+        const layers = definitions.map((definition) => {
+          return createLayer(definition);
+        });
+
+        const map = new WebMap({
+          portalItem: {
+            id: "7359702bf7c945269c8b30ca9e0dec4f"
+          },
+          layers: layers
+        });
+
+        const view = new MapView({
+          map,
+          container: "viewDiv",
+          scale: 2311162.217155,
+          center: [-117.512764, 34.04355]
+        });
+
+        let timeSlider;
+        view.when(() => {
+          view.constraints = {
+            geometry: {
+              rings: [
+                [-13416665.083680924, 3805979.0779788434],
+                [-13416665.083680924, 4238292.578017011],
+                [-12809165.080784526, 4238292.578017011],
+                [-12809165.080784526, 3805979.0779788434],
+                [-13416665.083680924, 3805979.0779788434]
+              ],
+              spatialReference: {
+                wkid: 102100
+              },
+              type: "polygon"
+            },
+            minScale: 2311162.217155
+          };
+          timeSlider = new TimeSlider({
+            container: "timeSlider",
+            view: view,
+            playRate: 2000,
+            fullTimeExtent: {
+              start: new Date(2019, 0, 1),
+              end: new Date(2019, 11, 1)
+            },
+            stops: {
+              interval: {
+                value: 1,
+                unit: "months"
+              }
+            }
+          });
+          timeSlider.watch("timeExtent", () => {
+            updateFiresStats();
+          });
+        });
+
+        view.whenLayerView(layers[layers.length - 1]).then((layerView) => {
+          watchUtils.whenFalseOnce(layerView, "updating", () => {
+            updateFiresStats();
+          });
+        });
+
+        layerViewsEachAlways = () => {
+          return promiseUtils.eachAlways(
+            layers.map((layer) => {
+              return view.whenLayerView(layer);
+            })
+          );
+        };
+
+        const totalAcres = {
+          onStatisticField: "GIS_ACRES",
+          outStatisticFieldName: "total_acres",
+          statisticType: "sum"
+        };
+        const totalFires = {
+          onStatisticField: "GlobalID",
+          outStatisticFieldName: "total_fires",
+          statisticType: "count"
+        };
+
+        const statsFields = {
+          total_acres: "Total acres",
+          avg_acres: "Average acres"
+        };
+
+        const statQuery = {
+          outStatistics: [totalAcres, totalFires]
+        };
+
+        queryFeaturesForStats = (layerViewsResults) => {
+          return promiseUtils.eachAlways(
+            layerViewsResults.map((result) => {
+              if (result.error) {
+                return promiseUtils.resolve(result.error);
+              } else {
+                const layerView = result.value;
+                let start = new Date(timeSlider.timeExtent.start);
+                let end = new Date(timeSlider.timeExtent.end);
+                start.setFullYear(start.getFullYear() - layerView.layer.timeOffset.value);
+                end.setFullYear(end.getFullYear() - layerView.layer.timeOffset.value);
+                statQuery.timeExtent = {
+                  start: start,
+                  end: end
+                };
+                return layerView.queryFeatures(statQuery).then(
+                  (response) => {
+                    return response.features[0].attributes;
+                  },
+                  (e) => {
+                    return promiseUtils.resolve(e);
+                  }
+                );
+              }
+            })
+          );
+        };
+
+        updateFiresStats = () => {
+          layerViewsEachAlways().then((layerViewsResults) => {
+            queryFeaturesForStats(layerViewsResults).then((fireStatsQueryResults) => {
+              let acresBurnt = 0;
+              let fires = 0;
+              fireStatsQueryResults.map((result) => {
+                if (result.error) {
+                  return promiseUtils.resolve(result.error);
+                } else {
+                  if (result.value.total_acres) {
+                    acresBurnt += result.value.total_acres;
+                  }
+                  if (result.value.total_fires) {
+                    fires += result.value.total_fires;
+                  }
+                }
+              });
+              statsDiv.innerHTML =
+                "<span>" +
+                fires +
+                "</span> fires were recorded between " +
+                timeSlider.timeExtent.start.toLocaleDateString("default", { month: "long" }) +
+                " and " +
+                timeSlider.timeExtent.end.toLocaleDateString("default", { month: "long" }) +
+                " covering a total of <span>" +
+                acresBurnt.toFixed(2) +
+                "</span> acres.";
+            });
+          });
+        };
+        const statsDiv = document.getElementById("statsDiv");
+        const infoDiv = document.getElementById("infoDiv");
+        const infoDivExpand = new Expand({
+          collapsedIconClass: "esri-icon-collapse",
+          expandIconClass: "esri-icon-expand",
+          expandTooltip: "Expand fires info",
+          view: view,
+          content: infoDiv,
+          expanded: true
+        });
+        view.ui.add(infoDivExpand, "top-right");
+      });
+    </script>
+  </head>
+
+  <body>
+    <div id="viewDiv"></div>
+    <div id="timeSlider"></div>
+    <div id="infoDiv" class="esri-widget">
+      <div><b>Southern California Fires (2000-2019)</b></div>
+      <br />
+      <div id="statsDiv" class="esri-widget"></div>
+    </div>
+  </body>
+</html>

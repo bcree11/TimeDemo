@@ -1,0 +1,102 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>Filter features with TimeSlider | Sample | ArcGIS API for JavaScript 4.18</title>
+
+    <style>
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+    </style>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.18/esri/themes/dark/main.css" />
+    <script src="https://js.arcgis.com/4.18/"></script>
+    <script>
+      require(["esri/config", "esri/WebMap", "esri/views/MapView", "esri/layers/FeatureLayer"], function (
+        esriConfig,
+        WebMap,
+        MapView,
+        FeatureLayer
+      ) {
+        let layerView;
+        esriConfig.portalUrl = "https://nw-brews.mapsdevext.arcgis.com";
+        const featureLayer = new FeatureLayer({
+          url:
+            "https://servicesdev1.arcgis.com/4dUZrgeYblcQBSvX/ArcGIS/rest/services/California_Fire_Perimeters_Geo/FeatureServer/0",
+          definitionExpression: "YEAR_ > 1999",
+          popupTemplate: {
+            title: "Southern California Fires (2000-2019)",
+            content: [
+              {
+                type: "fields",
+                fieldInfos: [
+                  {
+                    fieldName: "YEAR_",
+                    label: "Year",
+                  },
+                  {
+                    fieldName: "FIRE_NAME",
+                    label: "Fire Name",
+                  },
+                  {
+                    fieldName: "ALARM_DATE",
+                    label: "Alarm Date",
+                  },
+                  {
+                    fieldName: "CONT_DATE",
+                    label: "Containment Date",
+                  },
+                  {
+                    fieldName: "GIS_ACRES",
+                    label: "Acres",
+                  }
+                ]
+              }
+            ]
+          }
+        });
+        const map = new WebMap({
+          portalItem: {
+            id: "7359702bf7c945269c8b30ca9e0dec4f"
+          },
+          layers: featureLayer
+        });
+        const view = new MapView({
+          map,
+          container: "viewDiv",
+          scale: 2311162.217155,
+          center: [-117.512764, 34.04355]
+        });
+        view.whenLayerView(featureLayer).then((lv) => {
+          layerView = lv;
+          view.constraints = {
+            geometry: {
+              rings: [
+                [-13416665.083680924, 3805979.0779788434],
+                [-13416665.083680924, 4238292.578017011],
+                [-12809165.080784526, 4238292.578017011],
+                [-12809165.080784526, 3805979.0779788434],
+                [-13416665.083680924, 3805979.0779788434]
+              ],
+              spatialReference: {
+                wkid: 102100
+              },
+              type: "polygon"
+            },
+            minScale: 2311162.217155
+          };
+        });
+      });
+    </script>
+  </head>
+
+  <body>
+    <div id="viewDiv"></div>
+  </body>
+</html>

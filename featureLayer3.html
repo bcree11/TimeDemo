@@ -1,0 +1,223 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>Filter features with TimeSlider | Sample | ArcGIS API for JavaScript 4.18</title>
+
+    <style>
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+
+      #timeSlider {
+        width: 500px;
+      }
+
+      #infoDiv {
+        padding: 10px;
+        width: 280px;
+      }
+
+      #infoDiv span {
+        color: #f9c653;
+        font-size: 12pt;
+        font-weight: bolder;
+      }
+    </style>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.18/esri/themes/dark/main.css" />
+    <script src="https://js.arcgis.com/4.18/"></script>
+    <script>
+      require([
+        "esri/config",
+        "esri/WebMap",
+        "esri/views/MapView",
+        "esri/layers/FeatureLayer",
+        "esri/widgets/TimeSlider",
+        "esri/widgets/Expand"
+      ], function (esriConfig, WebMap, MapView, FeatureLayer, TimeSlider, Expand) {
+        let layerView;
+        esriConfig.portalUrl = "https://nw-brews.mapsdevext.arcgis.com";
+        const featureLayer = new FeatureLayer({
+          url:
+            "https://servicesdev1.arcgis.com/4dUZrgeYblcQBSvX/ArcGIS/rest/services/California_Fire_Perimeters_Geo/FeatureServer/0",
+          definitionExpression: "YEAR_ > 1999",
+          popupTemplate: {
+            title: "Southern California Fires (2000-2019)",
+            content: [
+              {
+                type: "fields",
+                fieldInfos: [
+                  {
+                    fieldName: "YEAR_",
+                    label: "Year",
+                    visible: true
+                  },
+                  {
+                    fieldName: "FIRE_NAME",
+                    label: "Fire Name",
+                    visible: true
+                  },
+                  {
+                    fieldName: "ALARM_DATE",
+                    label: "Alarm Date",
+                    visible: true
+                  },
+                  {
+                    fieldName: "CONT_DATE",
+                    label: "Containment Date",
+                    visible: true
+                  },
+                  {
+                    fieldName: "GIS_ACRES",
+                    label: "Acres",
+                    visible: true
+                  }
+                ]
+              }
+            ]
+          }
+        });
+        const map = new WebMap({
+          portalItem: {
+            id: "7359702bf7c945269c8b30ca9e0dec4f"
+          },
+          layers: featureLayer
+        });
+        const view = new MapView({
+          map,
+          container: "viewDiv",
+          scale: 2311162.217155,
+          center: [-117.512764, 34.04355]
+        });
+        const timeSlider = new TimeSlider({
+          container: "timeSlider",
+          playRate: 1000
+        });
+        view.whenLayerView(featureLayer).then((lv) => {
+          layerView = lv;
+          view.constraints = {
+            geometry: {
+              rings: [
+                [-13416665.083680924, 3805979.0779788434],
+                [-13416665.083680924, 4238292.578017011],
+                [-12809165.080784526, 4238292.578017011],
+                [-12809165.080784526, 3805979.0779788434],
+                [-13416665.083680924, 3805979.0779788434]
+              ],
+              spatialReference: {
+                wkid: 102100
+              },
+              type: "polygon"
+            },
+            minScale: 2311162.217155
+          };
+          const start = new Date(2000, 0, 1);
+          const end = new Date(2020, 0, 1);
+          timeSlider.fullTimeExtent = {
+            start,
+            end
+          };
+          timeSlider.values = [start, new Date(2001, 0, 1)];
+          timeSlider.stops = {
+            interval: {
+              value: 1,
+              unit: "years"
+            }
+          };
+        });
+        const totalAcres = {
+          onStatisticField: "GIS_ACRES",
+          outStatisticFieldName: "total_acres",
+          statisticType: "sum"
+        };
+        const totalFires = {
+          onStatisticField: "GlobalID",
+          outStatisticFieldName: "total_fires",
+          statisticType: "count"
+        };
+        const avgAcres = {
+          onStatisticField: "GIS_ACRES",
+          outStatisticFieldName: "avg_acres",
+          statisticType: "avg"
+        };
+        timeSlider.watch("timeExtent", (timeExtent) => {
+          layerView.effect = {
+            filter: {
+              timeExtent: timeSlider.timeExtent,
+              geometry: view.extent
+            },
+            excludedEffect: "opacity(0)"
+          };
+          const statQuery = layerView.effect.filter.createQuery();
+          statQuery.outStatistics = [totalAcres, avgAcres, totalFires];
+          const statsFields = {
+            total_acres: "Total acres",
+            avg_acres: "Average acres"
+          };
+          featureLayer
+            .queryFeatures(statQuery)
+            .then((result) => {
+              const htmls = [];
+              statsDiv.innerHTML = "";
+              if (result.error) {
+                return result.error;
+              } else {
+                if (result.features.length >= 1) {
+                  let attributes = result.features[0].attributes;
+                  for (name in statsFields) {
+                    if (attributes[name] && attributes[name] != null) {
+                      const html =
+                        "<br/>" + statsFields[name] + ": <b><span> " + attributes[name].toFixed(2) + "</span></b>";
+                      htmls.push(html);
+                    }
+                  }
+                  statsDiv.innerHTML =
+                    "<span>" +
+                    result.features[0].attributes.total_fires +
+                    "</span> fires were recorded between " +
+                    timeSlider.timeExtent.start.toLocaleDateString() +
+                    " - " +
+                    timeSlider.timeExtent.end.toLocaleDateString() +
+                    ".<br/>";
+                  if (htmls[0] !== undefined) {
+                    htmls.map((html) => (statsDiv.innerHTML += html));
+                  }
+                }
+              }
+            })
+            .catch((error) => {
+              console.log(error);
+            });
+        });
+        view.ui.add(timeSlider, "bottom-left");
+        const statsDiv = document.getElementById("statsDiv");
+        const infoDiv = document.getElementById("infoDiv");
+        const infoDivExpand = new Expand({
+          collapsedIconClass: "esri-icon-collapse",
+          expandIconClass: "esri-icon-expand",
+          expandTooltip: "Expand fires info",
+          view: view,
+          content: infoDiv,
+          expanded: true
+        });
+        view.ui.add(infoDivExpand, "top-right");
+      });
+    </script>
+  </head>
+
+  <body>
+    <div id="viewDiv"></div>
+    <div id="timeSlider"></div>
+    <div id="infoDiv" class="esri-widget">
+      <div><b>Southern California Fires (2000-2019)</b></div>
+      <br />
+      <div id="statsDiv" class="esri-widget"></div>
+    </div>
+  </body>
+</html>
